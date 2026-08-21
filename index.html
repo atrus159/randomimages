@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Random Image Feed</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div class="title">Random Image Feed</div>
+    <div class="controls">
+      <button id="shuffleBtn">Shuffle</button>
+      <button id="clearSeenBtn" class="secondary">Reset seen</button>
+      <label class="count-label">
+        Batch
+        <select id="batchSize">
+          <option value="20">20</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <main id="feed" aria-live="polite"></main>
+
+  <div id="status" class="status">Loading images…</div>
+
+  <template id="cardTemplate">
+    <article class="card">
+      <a class="image-link" target="_blank" rel="noopener noreferrer">
+        <img loading="lazy" decoding="async" alt="">
+      </a>
+      <div class="card-footer">
+        <a class="source-link" target="_blank" rel="noopener noreferrer">Open source</a>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
