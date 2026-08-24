@@ -10,6 +10,9 @@ let queue = [];
 let seen = new Set();
 let loading = false;
 
+const WORKER_URL =
+  "https://black-recipe-f2ad.darius-is-ru.workers.dev/";
+
 function shuffle(array) {
   const a = [...array];
   for (let i = a.length - 1; i > 0; i--) {
@@ -21,7 +24,7 @@ function shuffle(array) {
 
 function normalizeEntry(entry) {
   if (typeof entry === "string") {
-    return { url: entry, source: entry };
+    return { url: entry, source: entry, title: "" };
   }
 
   if (entry && typeof entry.url === "string") {
@@ -41,6 +44,7 @@ async function loadImages() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     const data = await response.json();
+  
     if (!Array.isArray(data)) {
       throw new Error("images.json must contain an array.");
     }
@@ -112,22 +116,153 @@ function loadMore() {
   loading = false;
 }
 
-function addCard(item) {
-  const fragment = template.content.cloneNode(true);
-  const card = fragment.querySelector(".card");
-  const imageLink = fragment.querySelector(".image-link");
-  const img = fragment.querySelector("img");
-  const sourceLink = fragment.querySelector(".source-link");
 
-  imageLink.href = item.source || item.url;
-  img.src = item.url;
-  img.alt = item.title || "Image from collection";
+async function findUpdatedImageUrl(item) {
+  console.log("Fallback lookup for image:");
+  console.log("Image URL:", item.url);
+  console.log("Source:", item.source);
 
-  sourceLink.href = item.source || item.url;
-
-  img.addEventListener("error", () => {
-    card.remove();
+  const params = new URLSearchParams({
+    url: item.url,
+    source: item.source
   });
+
+  const response = await fetch(
+    `${WORKER_URL}?${params.toString()}`
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Worker returned HTTP ${response.status}`
+    );
+  }
+
+  const result =
+    await response.json();
+
+  console.log(
+    "Worker response:",
+    result
+  );
+
+  if (!result.found || !result.url) {
+    throw new Error(
+      result.error ||
+      "No updated image URL found."
+    );
+  }
+
+  return result.url;
+}
+
+function addCard(item) {
+  const fragment =
+    template.content.cloneNode(true);
+
+  const card =
+    fragment.querySelector(".card");
+
+  const imageLink =
+    fragment.querySelector(".image-link");
+
+  const img =
+    fragment.querySelector("img");
+
+  const sourceLink =
+    fragment.querySelector(".source-link");
+
+  imageLink.href =
+    item.source || item.url;
+
+  img.alt =
+    item.title ||
+    "Image from collection";
+
+  sourceLink.href =
+    item.source || item.url;
+
+  /*
+   * Keep track of whether we've already
+   * attempted the fallback.
+   */
+  let fallbackAttempted = false;
+
+  /*
+   * This function sets the image URL.
+   */
+  function setImageUrl(url) {
+    img.src = url;
+  }
+
+  /*
+   * If the original image fails, ask the
+   * Cloudflare Worker for the current URL.
+   */
+  img.addEventListener(
+    "error",
+    async () => {
+      /*
+       * Don't retry forever.
+       */
+      if (fallbackAttempted) {
+        console.log(
+          "Fallback image also failed:",
+          img.src
+        );
+
+        card.remove();
+        return;
+      }
+
+      fallbackAttempted = true;
+
+      console.log(
+        "Image failed:",
+        item.url
+      );
+
+      console.log(
+        "Trying fallback lookup..."
+      );
+
+      try {
+        const updatedUrl =
+          await findUpdatedImageUrl(item);
+
+        console.log(
+          "Updated image URL:",
+          updatedUrl
+        );
+
+        /*
+         * Change the link to point to the
+         * newly discovered image as well.
+         */
+        imageLink.href =
+          item.source || updatedUrl;
+
+        /*
+         * Try loading the new URL.
+         */
+        setImageUrl(updatedUrl);
+
+      } catch (error) {
+        console.error(
+          "Fallback lookup failed:",
+          error
+        );
+
+        card.remove();
+      }
+    }
+  );
+
+  /*
+   * Set the original URL AFTER installing
+   * the error handler, so we don't miss
+   * an immediate failure.
+   */
+  setImageUrl(item.url);
 
   feed.appendChild(fragment);
 }
